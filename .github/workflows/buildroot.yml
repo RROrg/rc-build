@@ -1,0 +1,88 @@
+#
+# Copyright (C) 2022 Ing <https://github.com/wjz304>
+#
+# This is free software, licensed under the MIT License.
+# See /LICENSE for more information.
+#
+
+name: Build buildroot
+
+on:
+  workflow_dispatch:
+    inputs:
+      push: 
+        description: 'push'
+        default: false
+        type: boolean
+      br2ver:
+        description: "buildroot version"
+        default: "2023.08.x"
+        type: string
+
+jobs:
+  buildroot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@main
+
+      - name: Checkout
+        uses: actions/checkout@main
+        with:
+          repository: RROrg/buildroot
+          token: ${{ secrets.RRORG }}
+          path: buildroot
+
+      - name: Checkout
+        uses: actions/checkout@main
+        with:
+          repository: RROrg/rc-load
+          token: ${{ secrets.RRORG }}
+          path: rc-load
+
+      - name: Initialization environment
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          sudo timedatectl set-timezone "Asia/Shanghai"
+
+          sudo apt install -y libelf-dev
+          df -h
+
+
+      - name: Build buildroot
+        run: |
+          cd buildroot
+          chmod +x ./build_rc.sh
+          . ./build_rc.sh "${{ inputs.br2ver}}"
+
+          [ -n "${BUILDROOT_VERSION}" ] && echo "BUILDROOT_VERSION=${BUILDROOT_VERSION}" >> $GITHUB_ENV || exit 1
+          [ -n "${KERNEL_VERSION}" ] && echo "KERNEL_VERSION=${KERNEL_VERSION}" >> $GITHUB_ENV || exit 1
+
+      - name: Upload artifact
+        if: env.VERSION == ''
+        uses: actions/upload-artifact@v3
+        with:
+          name: buildroot
+          path: |
+            buildroot/.rc-buildroot/output/images/bzImage
+
+      - name: Check and Push
+        if: env.VERSION != ''
+        run: |
+          if [ -f "buildroot/.rc-buildroot/output/images/bzImage" ]; then
+            echo "Copy bzImage ..."
+            cp -vf buildroot/.rc-buildroot/output/images/bzImage rc-load/config/_common/bzImage
+
+            cd rc-load
+            echo "Git push ..."
+            git pull
+            status=$(git status -s | grep -E 'config/_common/bzImage' | awk '{printf " %s", $2}')
+            if [ -n "${status}" ]; then
+              git add ${status}
+              git commit -m "update $(date +%Y-%m-%d" "%H:%M:%S)"
+              git push -f
+            fi
+          else
+            echo "No change ..."
+          fi

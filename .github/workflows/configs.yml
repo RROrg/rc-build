@@ -1,0 +1,91 @@
+#
+# Copyright (C) 2022 Ing <https://github.com/wjz304>
+# 
+# This is free software, licensed under the MIT License.
+# See /LICENSE for more information.
+#
+
+
+name: configs
+
+on:
+  workflow_dispatch:
+    inputs:
+      push:
+        description: "push"
+        default: false
+        type: boolean
+jobs:
+  configs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@main
+
+      - name: Checkout
+        uses: actions/checkout@main
+        with:
+          repository: RROrg/rc-load
+          token: ${{ secrets.RRORG }}
+          path: rc-load
+
+      - name: Set up Python 3
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Initialization environment
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          sudo timedatectl set-timezone "Asia/Shanghai"
+
+          pip install requests BeautifulSoup4
+
+      - name: make info json
+        shell: python
+        run: |
+          # -*- coding: utf-8 -*-
+          import os, sys, json
+          sys.path.append('${{ github.workspace }}/rc-load')
+          import syno
+
+          root = '' # os.path.dirname(os.path.abspath(__file__))
+
+          # loads = syno.getThisLoads()
+          # if len(loads) > 0:
+          #     print(json.dumps(loads, indent=4))
+          #     with open(os.path.join(root, 'rc-load/config/loads.json'), 'w', encoding='utf-8') as f:
+          #         f.write(json.dumps(loads, indent=4))
+
+          models = syno.getSynoModels()
+          if len(models) > 0:
+              print(json.dumps(models, indent=4))
+              with open(os.path.join(root, 'rc-load/config/models.json'), 'w', encoding='utf-8') as f:
+                  f.write(json.dumps(models, indent=4))
+
+          pats = syno.getSynoPATs()
+          if len(pats) > 0:
+              print(json.dumps(pats, indent=4))
+              with open(os.path.join(root, 'rc-load/config/pats.json'), 'w', encoding='utf-8') as f:
+                  f.write(json.dumps(pats, indent=4))
+
+      - name: Upload artifact
+        if: success() && inputs.push == false
+        uses: actions/upload-artifact@v3
+        with:
+          name: grub
+          path: |
+            rc-load/config/*.json
+
+      - name: Check and Push
+        run: |
+          cd rc-load
+          echo "Git push ..."
+          git pull
+          status=$(git status -s | grep -E 'config' | awk '{printf " %s", $2}')
+          if [ -n "${status}" ]; then
+            git add ${status}
+            git commit -m "update $(date +%Y-%m-%d" "%H:%M:%S)"
+            git push -f
+          fi
